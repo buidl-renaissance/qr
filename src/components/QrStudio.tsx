@@ -2,8 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import styled, { keyframes } from "styled-components";
+import HistoryBar from "@/components/HistoryBar";
 import StylePanel from "@/components/StylePanel";
 import { DEFAULT_OPTIONS, type QrStudioOptions } from "@/lib/qrDefaults";
+import {
+  loadHistory,
+  pushHistory,
+  removeHistoryItem,
+  saveHistory,
+  type QrHistoryItem,
+} from "@/lib/qrHistory";
 import { parseOptions, serializeOptions } from "@/lib/qrUrlState";
 
 const QrPreview = dynamic(() => import("@/components/QrPreview"), {
@@ -26,7 +34,8 @@ const Page = styled.main`
   position: relative;
   min-height: 100vh;
   padding: 2rem 1.25rem 4rem;
-  overflow: hidden;
+  padding-right: calc(220px + 1.5rem);
+  overflow-x: hidden;
 
   &::before {
     content: "";
@@ -57,6 +66,15 @@ const Page = styled.main`
     );
     pointer-events: none;
     z-index: 0;
+  }
+
+  @media (max-width: 960px) {
+    padding-right: calc(200px + 1.25rem);
+  }
+
+  @media (max-width: 720px) {
+    padding-right: 1.25rem;
+    padding-bottom: calc(42vh + 1.5rem);
   }
 `;
 
@@ -170,6 +188,7 @@ const PreviewSkeleton = styled.div`
 export default function QrStudio() {
   const router = useRouter();
   const [options, setOptions] = useState<QrStudioOptions>(DEFAULT_OPTIONS);
+  const [history, setHistory] = useState<QrHistoryItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const downloadRef = useRef<
     ((ext: "png" | "svg") => Promise<void>) | null
@@ -185,8 +204,14 @@ export default function QrStudio() {
       skipUrlWrite.current = true;
       setOptions(parseOptions(queryString));
     }
+    setHistory(loadHistory());
     setHydrated(true);
   }, [router.isReady]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    saveHistory(history);
+  }, [history, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -226,10 +251,32 @@ export default function QrStudio() {
     setOptions(structuredClone(DEFAULT_OPTIONS));
   };
 
+  const onNewQr = () => {
+    if (!options.data.trim()) return;
+    setHistory((prev) => pushHistory(prev, options));
+    setOptions(structuredClone(DEFAULT_OPTIONS));
+  };
+
+  const onSelectHistory = (item: QrHistoryItem) => {
+    setOptions(structuredClone(item.options));
+  };
+
+  const onRemoveHistory = (id: string) => {
+    setHistory((prev) => removeHistoryItem(prev, id));
+  };
+
   const previewOptions = useMemo(() => options, [options]);
+  const canSave = options.data.trim().length > 0;
 
   return (
     <Page>
+      <HistoryBar
+        history={history}
+        canSave={canSave}
+        onNewQr={onNewQr}
+        onSelect={onSelectHistory}
+        onRemove={onRemoveHistory}
+      />
       <Inner>
         <Hero>
           <Brand>QR</Brand>
